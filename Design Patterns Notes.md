@@ -370,3 +370,151 @@ void somefunction(){	MyClass *foo = new MyClass();	…	delete foo;}
 they’ll be on the heap.
 
 The above policy applies to everything (int, string, etc) in C++.
+
+
+
+## Liskov Substitution Principle
+**Objects** in a program should be **replaceable** with **instances** of their **subtypes** w/o altering the correctness of the program. 
+
+If a function takes a base class object as argument, then the function should also works with all the other subclass objects. 
+
+~~~C++
+#include <iostream>
+
+class Rectangle
+{
+protected:
+  int width, height;
+public:
+  Rectangle(const int width, const int height)
+    : width{width}, height{height} { }
+
+  int get_width() const { return width; }
+  virtual void set_width(const int width) { this->width = width; }
+  int get_height() const { return height; }
+  virtual void set_height(const int height) { this->height = height; }
+
+  int area() const { return width * height; }
+};
+
+class Square : public Rectangle
+{
+public:
+  Square(int size): Rectangle(size,size) {}
+  void set_width(const int width) override {
+    this->width = height = width;
+  }
+  void set_height(const int height) override {
+    this->height = width = height;
+  }
+};
+
+struct RectangleFactory
+{
+  static Rectangle create_rectangle(int w, int h);
+  static Rectangle create_square(int size);
+};
+
+void process(Rectangle& r)
+{
+  int w = r.get_width();
+  r.set_height(10);
+
+  std::cout << "expected area = " << (w * 10) 
+    << ", got " << r.area() << std::endl;
+}
+
+int main()
+{
+  Rectangle r{ 5,5 };
+  process(r);
+
+  Square s{ 5 };
+  process(s);
+
+  getchar();
+  return 0;
+}
+~~~
+
+1. Expected 50, got 50
+2. **Expected 50, got 100**
+
+
+
+## Interface Segregation Principle 
+
+Clients should not be forced to depend upon interfaces that they do not use. Avoid stuffing too much into a single interface.
+
+~~~c++
+#include <vector>
+struct Document;
+
+/*** bad interface, all subclass will has these 3 functions but usually only 
+      one is needed. You have to leave the rest as empty or throw exceptions ***/
+
+//struct IMachine
+//{
+//  virtual void print(Document& doc) = 0;
+//  virtual void fax(Document& doc) = 0;
+//  virtual void scan(Document& doc) = 0;
+//};
+//
+//struct MFP : IMachine
+//{
+//  void print(Document& doc) override;
+//  void fax(Document& doc) override;
+//  void scan(Document& doc) override;
+//};
+
+// 1. Recompile
+// 2. Client does not need this
+// 3. Forcing implementors to implement too much
+
+/*** better interface, seperate them ***/
+
+struct IPrinter
+{
+  virtual void print(Document& doc) = 0;
+};
+
+struct IScanner
+{
+  virtual void scan(Document& doc) = 0;
+};
+
+struct Printer : IPrinter
+{
+  void print(Document& doc) override;
+};
+
+struct Scanner : IScanner
+{
+  void scan(Document& doc) override;
+};
+
+struct IMachine: IPrinter, IScanner
+{
+};
+
+struct Machine : IMachine
+{
+  IPrinter& printer;
+  IScanner& scanner;
+
+  Machine(IPrinter& printer, IScanner& scanner)
+    : printer{printer},
+      scanner{scanner}
+  {
+  }
+
+  void print(Document& doc) override {
+    printer.print(doc);
+  }
+  void scan(Document& doc) override;
+};
+
+// IPrinter --> Printer
+// everything --> Machine
+~~~
+
