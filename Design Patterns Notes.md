@@ -75,22 +75,22 @@ Here it's a bad idea to put persistence code in the class. Imagine you have hund
 ~~~c++
 class GfG 
 {  
-	public: 
-		GfG() 
-		{cout << "Inside Constructor\n"; } 
-		~GfG() 
-		{cout << "Inside Destructor\n"; } 
+public: 
+  GfG() 
+  {cout << "Inside Constructor\n"; } 
+  ~GfG() 
+  {cout << "Inside Destructor\n"; } 
 }; 
 
 int main() 
 { 
- 	int x = 0; 
- 	if (x==0) 
- 	{ 
-		//case1: GfG obj;
-		//case2: static GfG obj;
-	} 
-	cout << "End of main\n"; 
+  int x = 0; 
+  if (x==0) 
+  { 
+    //case1: GfG obj;
+    //case2: static GfG obj;
+  } 
+  cout << "End of main\n"; 
 } 
 ~~~
 Case1: 
