@@ -2,7 +2,7 @@
 
 Shiyu Mou
 
-Lecture notes and projects. 
+Lecture notes, resources and projects. 
 
 Coding security is not considered in all code.
 
