@@ -113,17 +113,17 @@ Just like the static data members or static variables inside the class, static m
 class GfG 
 { 
 public: 
-	// static member function 
-	static void printMsg() 
-	{ 
-		cout<<"Welcome to GfG!"; 
-	} 
+  // static member function 
+  static void printMsg() 
+  { 
+    cout<<"Welcome to GfG!"; 
+  } 
 }; 
 // main function 
 int main() 
 { 
-	// invoking a static member function 
-	GfG::printMsg(); 
+  // invoking a static member function 
+  GfG::printMsg(); 
 }
 ~~~
 
