@@ -700,18 +700,130 @@ struct HtmlElement
 
   string str(int indent = 0) const
   {
-    ostringstream oss;
-    string i(ident_size*indent, ' ');
-    oss << i << "<" << name << ">" << endl;
-    if (text.size() > 0)
-      oss << string(indent_size*(indent + 1), ' ') << text << endl;
-    for (const auto& e: elements)
-      oss < e.str(indent + 1);
+		// some code
+    // in C++, str is usually for printing
+  }
+};
 
-    oss << i << "</" << name << ">" << endl;
-    return oss.str();
+struct HtmlBuilder
+{
+  HtmlElement root;
+  HtmlBuilder(string rootname)
+  {
+    root.name = root_name;
   }
 
+	void add_child(string child_name, string child_text)
+  {
+    HtmlElement e{child_name, child_text};
+    root.elements.emplace_back(e);
+  }
+  string str() {return root.str();}
+};
+
+int main()
+{
+  // easier way
+  HtmlBuilder builder{ "ul" };
+  builder.add_child("li", "hello"); 
+  builder.add_child("li", "world");
+  cout << builder.str() << endl;
+  return 0;
+}
+~~~
+
+
+
+## Fluent Builder
+
+Fluent interface is something like `object.add().add()` so you don't need to do `object.add(); object.add();`This is achieved by returning either a reference or a pointer. 
+
+The static member in HtmlElement gives users a hint to use the builder to build object. 
+
+~~~c++
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <memory>
+using namespace std;
+
+// the struct here is just used for modeling this data.
+struct HtmlElement
+{
+  string name;
+  string text;
+  vecotor<HtmlElement> elements;
+  HtmlElement() {}
+  HtmlElement(const string& name, const string& text): name(name), text(text){}
+
+  string str(int indent = 0) const
+  {
+		// some code
+  }
+	// give costumer a hint to use the builder 
+  static HtmlBuilder build(string root_name)
+  {
+    return {root_name}; // here would be an implicit conversion for HtmlBuilder
+  }
+};
+
+// use a builder to actually build it
+struct HtmlBuilder
+{
+  HtmlElement root;
+  HtmlBuilder(string rootname)
+  {
+    root.name = root_name;
+  }
+
+  // fluent builder #1
+  // reference
+  HtmlBuilder& add_child(string child_name, string child_text)
+  {
+    HtmlElement e{child_name, child_text};
+    root.elements.emplace_back(e);
+    return *this;
+  }
+  
+  string str() {return root.str();}
+  // the operator here convert builder to element.
+  operator HtmlElement() const {return root;}
+};
+
+int main()
+{
+  // this way you get a builder 
+  auto builder = HtmlElement::build('ul').add.child("", "").add.child("", "");
+  // if you want to get a HtmlElement, add an operator
+  HtmlElement elem = HtmlElement::build('ul').add.child("", "").add.child("", "");
+  return 0;
+}
+~~~
+
+Now use pointer
+
+~~~c++
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <memory>
+using namespace std;
+
+struct HtmlElement
+{
+  string name;
+  string text;
+  vecotor<HtmlElement> elements;
+  HtmlElement() {}
+  HtmlElement(const string& name, const string& text): name(name), text(text){}
+
+  string str(int indent = 0) const
+  {
+		// some code
+  }
+	// give costumer a hint to use the builder 
   static unique_ptr<HtmlElement> build(string root_name)
   {
     return make_unique<HtmlElement>(root_name);
@@ -726,57 +838,218 @@ struct HtmlBuilder
     root.name = root_name;
   }
 
-  // void to start with
-  HtmlBuilder& add_child(string child_name, string child_text)
-  {
-    HtmlElement e{child_name, child_text};
-    root.elements.emplace_back(e);
-    return this;
-  }
- 
-  // pointer based
+ 	// fluent builder #2
+  // pointer 
   HtmlBuilder* add_child_2(string child_name, string child_text)
   {
     HtmlElement e{ child_name, child_text };
     root.elements.emplace_back(e);
     return this;
   }
-  
   string str() {return root.str();}
   operator HtmlElement() const {return root;}
 };
 
 int main()
 {
-  /*** bad way ***/ 
-  // <p>hello</p>
-  auto text = "hello";
-  string output;
-  output += "<p>";
-  output += text;
-  output += "</p>";
-  printf("<p>%s</p>", text);
-
-  // <ul><li>hello</li><li>world</li></ul>
-  string words[] = { "hello", "world" };
-  ostringstream oss;
-  oss << "<ul>";
-  for (auto w : words)
-    oss << "  <li>" << w << "</li>";
-  oss << "</ul>";
-  printf(oss.str().c_str());
-
-
-  // easier way
-  HtmlBuilder builder{ "ul" };
-  builder.add_child("li", "hello").add_child("li", "world");
-  cout << builder.str() << endl;
-
-
+	// fluent builder #2
   auto builder2 = HtmlElement::build("ul")
     ->add_child_2("li", "hello")->add_child_2("li", "world");
   cout << builder2 << endl;
-  return 0
+  return 0;
 }
 ~~~
 
+To force users to use our builder API by `HtmlBuilder::build()`, make sure they can only construct the HtmlElement through builder. 
+
+**Hide the constructor of HtmlElement.** So the user cannot build HtmlElement directly. To make builder work, we need to make builder a friend of HtmlElement. 
+
+~~~c++
+class HtmlElement
+{
+  friend class HtmlBuilder;
+  string name;
+  string text;
+  vecotor<HtmlElement> elements;
+  HtmlElement() {}
+  HtmlElement(const string& name, const string& text): name(name), text(text){}
+	
+public:
+  string str(int indent = 0) const
+  {
+		// some code
+  }
+	// give costumer a hint to use the builder 
+  static HtmlBuilder create(string root_name)
+  {
+    return {root_name}; // here would be an implicit conversion for HtmlBuilder
+  }
+};
+
+class HtmlBuilder
+{
+  HtmlElement root;
+public:
+  HtmlBuilder(string rootname)
+  {
+    root.name = root_name;
+  }
+
+  HtmlBuilder& add_child(string child_name, string child_text)
+  {
+    HtmlElement e{child_name, child_text};
+    root.elements.emplace_back(e);
+    return *this;
+  }
+  HtmlElement build() {return root;}
+  string str() {return root.str();}
+  operator HtmlElement() const {return root;}
+};
+
+int main()
+{
+  // if you want to get a HtmlElement, add an operator
+  HtmlElement elem = HtmlElement::build('ul').add.child("", "").add.child("", "").build();
+}
+~~~
+
+
+
+
+
+### Min Heap
+
+In C++ STL, there is [priority_queue](https://www.geeksforgeeks.org/priority-queue-container-adaptors-the-c-standard-template-library-stl/) that can directly be used to implement Max Heap. 
+
+~~~c++
+// C++ program to show that priority_queue is by 
+// default a Max Heap 
+#include <bits/stdc++.h> 
+using namespace std; 
+  
+// Driver code 
+int main () 
+{ 
+    // Creates a max heap 
+    priority_queue <int> pq; 
+    pq.push(5); 
+    pq.push(1); 
+    pq.push(10); 
+    pq.push(30); 
+    pq.push(20); 
+  
+    // One by one extract items from max heap 
+    while (pq.empty() == false) 
+    { 
+        cout << pq.top() << " "; 
+        pq.pop(); 
+    } 
+  
+    return 0; 
+} 
+// Output: 30 20 10 5 1
+~~~
+
+**How to implement Min Heap?**
+priority_queue supports a constructor that requires two extra arguments to make it min heap.
+
+```c++
+ //   priority_queue <Type, vector<Type>, ComparisonType > min_heap;
+priority_queue <int, vector<int>, greater<int> > pq; 
+```
+
+**How to make a min heap of user defined class?**
+Let us consider below example where we build a min heap of 2 D points ordered by X axis.
+
+~~~c++
+// C++ program to use priority_queue to implement Min Heap 
+// for user defined class 
+#include <bits/stdc++.h> 
+using namespace std; 
+  
+// User defined class, Point 
+class Point 
+{ 
+   int x; 
+   int y; 
+public: 
+   Point(int _x, int _y) 
+   { 
+      x = _x; 
+      y = _y; 
+   } 
+   int getX() const { return x; } 
+   int getY() const { return y; } 
+}; 
+  
+// To compare two points 
+class myComparator 
+{ 
+public: 
+    int operator() (const Point& p1, const Point& p2) 
+    { 
+        return p1.getX() > p2.getX(); 
+    } 
+}; 
+  
+// Driver code 
+int main () 
+{ 
+    // Creates a Min heap of points (order by x coordinate) 
+    priority_queue <Point, vector<Point>, myComparator > pq; 
+  
+    // Insert points into the min heap 
+    pq.push(Point(10, 2)); 
+    pq.push(Point(2, 1)); 
+    pq.push(Point(1, 5)); 
+  
+    // One by one extract items from min heap 
+    while (pq.empty() == false) 
+    { 
+        Point p = pq.top(); 
+        cout << "(" << p.getX() << ", " << p.getY() << ")"; 
+        cout << endl; 
+        pq.pop(); 
+    } 
+  
+    return 0; 
+} 
+~~~
+
+### Member function defined inside class or outside class
+
+If defined **inside** class, the functions are **automatically inline** (unless complicated). 
+
+Function definition is **better outside** the class. That way your code can **remain safe if required**. The **header** file should **just give declarations**.
+
+Suppose someone wants to use your code, you can just give him the .**h file and the .obj file** (obtained after compilation) of your class. **He does not need the .cpp file to use your code.**
+
+That way your implementation is not visible to anyone else.
+
+### Structured binding in C++
+
+https://www.geeksforgeeks.org/structured-binding-c/
+
+It doesn't work for vector. Because this only works for structures that are known at compile time. In compile time, the size of vector is unknown. 
+
+### Difference between & and && 
+
+&& is a new reference **operator defined in the C++11** standard. int&& a means "a" is an **r-value reference**. && is normally only used to declare a parameter of a function. And it only takes an **r-value expression**.
+
+Simply put, an **r-value is a value that doesn't have a memory address**. E.g. the number 6, and character 'v' are both r-values. **int a, a is an l-value**, however (a+2) is an r-value. For example:
+
+```c++
+void foo(int&& a)
+{
+   //Some magical code...
+}
+int main()
+{
+   int b;
+   foo(b);       //Error. An rValue reference cannot be pointed to a lValue.
+   foo(5);       //Compiles with no error.
+   foo(b+3);     //Compiles with no error.
+   int&& c = b;  //Error. An rValue reference cannot be pointed to a lValue.
+   int&& d = 5;  //Compiles with no error.
+}
+```
