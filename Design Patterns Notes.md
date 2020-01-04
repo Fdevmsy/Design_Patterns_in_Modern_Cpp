@@ -136,6 +136,8 @@ https://docs.microsoft.com/en-us/cpp/cpp/static-members-cpp?view=vs-2019
 When the constructor has one single argument, 
 https://stackoverflow.com/questions/121162/what-does-the-explicit-keyword-mean
 
+**Class objects** could also be initialized **using assignment from a single value** if they **had a conversion constructor** (prior to C++11, a constructor wit**h a single parameter** was called a ***conversion constructor***):
+
 ~~~c++
 ```
 class Foo
@@ -1053,3 +1055,202 @@ int main()
    int&& d = 5;  //Compiles with no error.
 }
 ```
+
+### POD Type 
+
+A Plain Old Data Structure in C++ is an **aggregate class** that contains only PODS as members, has no user-defined destructor, no user-defined copy assignment operator, and no non static members of pointer-to-member type.
+
+~~~c++
+struct bar { int a_; double b_;};
+bar b{ 42, 1.2 };
+~~~
+
+### Uniform initialization 
+
+In C++03, initialization of variables has **been different for different kinds of variables**, and sometimes it was not even possible. With C++11 we got so-called *uniform initialization*, which attempts to make the whole topic a bit easier for developers.
+
+Uniform initialization is pretty simple: you can **initialize practically everything with arguments in curly braces. The compiler then will do just the right thing.**
+
+~~~c++
+# in the past
+std::string s1("test");   // direct initialization 
+std::string s2 = "test";  // copy initialization
+~~~
+
+To uniformly initialize objects regardless of their type, use the brace-initialization form `{}` that can be used for both direct initialization and copy initialization. When used with brace initialization, these are called **direct list** and **copy list initialization.**
+
+They are **equal in the sense that they do mostly the same thing**. But they're not technically equal; **copy-list-initialization cannot call `explicit` constructors**. So if the selected constructor were `explicit`, the code would **fail to compile** in the copy-list-initialization cases.
+
+~~~c++
+T object {other};   // direct list initialization 
+T object = {other}; // copy list initialization
+~~~
+
+~~~c++
+class foo
+{
+  int a_;
+  double b_;
+  public:
+  foo():a_(0), b_(0) {}
+  foo(int a, double b = 0.0):a_(a), b_(b) {}
+};
+
+foo f1{}; 
+foo f2{ 42, 1.2 }; 
+foo f3{ 42 };
+
+
+struct bar 
+{
+  int a_; 
+  double b_;
+};
+bar b{ 42, 1.2 };
+~~~
+
+### Initializer list
+
+I**nitialization of standard containers**, such as the **vector** and the **map** also shown above, is possible because all standard containers have an additional constructor in C++11 that takes an argument of type `std::initializer_list`. This is basically a lightweight proxy over an array of elements of type `T const`. These constructors then initialize the internal data from the values in the initializer list.
+
+~~~c++
+// so you can do
+vector<int> a{1, 2, 3, 4};
+map<int, int> b{{1, 2}, {2, 4}};
+~~~
+
+In C++11
+
+The following sample shows several examples of direct-list-initialization and copy-list-initialization. In C++11, the **deduced type** of all these **expressions** is `std::initializer_list`.
+
+~~~c++
+auto a = {42};   // std::initializer_list<int>
+auto b {42};     // std::initializer_list<int>
+auto c = {4, 2}; // std::initializer_list<int>
+auto d {4, 2};   // std::initializer_list<int>
+~~~
+
+C++17 has changed the rules for list initialization, differentiating between the direct- and copy-list-initialization. The new rules for type deduction are as follows:
+
+- for copy list initialization auto deduction will deduce a `std::initializer_list` if all elements in the list have the same type, or be ill-formed.
+- for direct list initialization auto deduction will deduce a `T` if the list has a single element, or be ill-formed if there is more than one element.
+
+Base on the new rules, the previous examples would change as follows: `a` and `c` are deduced as `std::initializer_list`; `b` is deduced as an `int`; `d`, which u**ses direct initialization and has more than one value in the brace-init-list, triggers a compiler error**.
+
+~~~c++
+auto a = {42};   // std::initializer_list<int>
+auto b {42};     // int
+auto c = {4, 2}; // std::initializer_list<int>
+auto d {4, 2};   // error, too many
+~~~
+
+### Subclass and Base class Constructor 
+
+Here’s what actually happens when **base** is instantiated:
+
+1. Memory for base is set aside
+2. The appropriate Base constructor is called
+3. The initialization list initializes variables
+4. The body of the constructor executes
+5. Control is returned to the caller
+
+Here’s what actually happens when derived is instantiated:
+
+1. Memory for derived is set aside (enough for both the Base and Derived portions)
+2. The appropriate Derived constructor is called
+3. **The Base object is constructed first using the appropriate Base constructor**. If no base constructor is specified, the default constructor will be used.
+4. The initialization list initializes variables
+5. The body of the constructor executes
+6. Control is returned to the caller
+
+### How to init Base Class members when instantiate Derived Class
+
+~~~c++
+class Base
+{
+public:
+    int m_id;
+    Base(int id=0)
+        : m_id{ id }
+    {
+    }
+    int getId() const { return m_id; }
+};
+~~~
+
+
+
+~~~c++
+class Derived: public Base
+{
+public:
+  double m_cost;
+  Derived(double cost=0.0, int id=0)
+    // does not work
+    : m_cost{ cost }, m_id{ id }
+  {
+  }
+  double getCost() const { return m_cost; }
+};
+
+~~~
+
+~~~c++
+class Derived: public Base
+{
+public:
+  double m_cost;
+
+  Derived(double cost=0.0, int id=0)
+    : m_cost{ cost }
+  {
+    // work but bad, what is m_id is const or reference? 
+    m_id = id;
+  }
+  double getCost() const { return m_cost; }
+};
+~~~
+
+When derived class is initiated, first the derived class constructor is called, but not initialized, then base class constructor is called, and finish the initialization, then derived constructor finish the initialization. If not specific, the default constructor of derived class will be called/
+
+Fortunately, C++ gives us the ability to explicitly **choose which Base class constructor** will be called! To do this, simply add a call to the base class Constructor in the initialization list of the derived class:
+
+~~~c++
+class Derived: public Base
+{
+public:
+  double m_cost;
+	// we can even make m_id private in base class
+  Derived(double cost=0.0, int id=0)
+    : Base{ id }, // Call Base(int) constructor with value id!
+  m_cost{ cost }
+  {
+  }
+  double getCost() const { return m_cost; }
+};
+~~~
+
+The base class constructor Base(int) will be used to initialize m_id to 5, and the derived class constructor will be used to initialize m_cost to 1.3!
+
+1. Memory for derived is allocated.
+2. The Derived(double, int) constructor is called, where cost = 1.3, and id = 5
+3. The compiler looks to see if we’ve asked for a particular Base class constructor. We have! So it calls Base(int) with id = 5.
+4. The base class constructor initialization list sets m_id to 5
+5. The base class constructor body executes, which does nothing
+6. The base class constructor returns
+7. The derived class constructor initialization list sets m_cost to 1.3
+8. The derived class constructor body executes, which does nothing
+9. The derived class constructor returns
+
+## Builder Facet 
+
+Builder with multiple concrete builder classes inheriting from Builder. These classes contain the functionality to create a particular complex product.
+
+
+
+## Builder Summay
+
+- **Product –** The product class defines the type of the complex object that is to be generated by the builder pattern. 
+- **Builder –** This abstract base class defines all of the steps that must be taken in order to correctly create a product. Each step is generally abstract as the actual functionality of the builder is carried out in the concrete subclasses. The GetProduct method is used to return the final product. The builder class is often replaced with a simple interface. 
+- **ConcreteBuilder –** There may be any number of concrete builder classes inheriting from Builder. These classes contain the functionality to create a particular complex product. 
+- **Director –** The director class controls the algorithm that generates the final product object. A director object is instantiated and its Construct method is called. The method includes a parameter to capture the specific concrete builder object that is to be used to generate the product. The director then calls methods of the concrete builder in the correct order to generate the product object. On completion of the process, the GetProduct method of the builder object can be used to return the product.
