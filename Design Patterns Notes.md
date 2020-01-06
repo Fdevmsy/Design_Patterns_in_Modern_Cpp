@@ -1254,3 +1254,683 @@ Builder with multiple concrete builder classes inheriting from Builder. These cl
 - **Builder –** This abstract base class defines all of the steps that must be taken in order to correctly create a product. Each step is generally abstract as the actual functionality of the builder is carried out in the concrete subclasses. The GetProduct method is used to return the final product. The builder class is often replaced with a simple interface. 
 - **ConcreteBuilder –** There may be any number of concrete builder classes inheriting from Builder. These classes contain the functionality to create a particular complex product. 
 - **Director –** The director class controls the algorithm that generates the final product object. A director object is instantiated and its Construct method is called. The method includes a parameter to capture the specific concrete builder object that is to be used to generate the product. The director then calls methods of the concrete builder in the correct order to generate the product object. On completion of the process, the GetProduct method of the builder object can be used to return the product.
+
+### Customized Comparator
+
+http://fusharblog.com/3-ways-to-define-comparison-functions-in-cpp/
+
+### How vector works internally 
+
+When std::vector’s internal memory completely finishes then it increases the size of its memory. To do that it performs following steps,
+
+1.) It will allocate a bigger chunk of memory on heap i.e. almost double the size of previously allocated.
+2.) Then it copies all the elements from old memory location to new one. Yes it copies them, so in case our elements are **user defined objects** then their **copy constructor** will be called. Which makes this step quite heavy in terms of speed.
+3.) Then after successful copying it deletes the old memory.
+
+### Fill random Numbers in std::vector using Lambda functions
+
+~~~c++
+// Initialize a vector with 10 ints of value 0
+std::vector<int> vecOfRandomNums(10);
+std::generate(vecOfRandomNums.begin(), vecOfRandomNums.end(), []() {
+	return rand() % 100;
+});
+~~~
+
+### Fill Random Numbers in std::vector using a Functor
+
+~~~c++
+struct RandomGenerator {
+  int maxValue;
+  RandomGenerator(int max) :
+  maxValue(max) {}
+	
+  int operator()() const {
+  	return rand() % maxValue;
+  }
+};
+// Generate 10 random numbers by a Functor and fill it in vector
+std::generate(vecOfRandomNums.begin(), vecOfRandomNums.end(), RandomGenerator(500));
+~~~
+
+
+
+## Functor 
+
+A functor (or function object) is a **C++ class that acts like a function**. Functors are called using the same old function call syntax. To create a functor, we create an object that **overloads the *operator()*.**
+
+~~~c++
+#include <iostream>
+class myFunctorClass
+{
+	int _x; 
+	public:
+		myFunctorClass (int x) : _x( x ) {}
+		int operator() (int y) { return _x + y; }
+		// I'm overloading this operator "()", and (int y) is arugment 
+};
+ 
+int main()
+{
+//	myFunctorClass addFive( 5 );
+	std::cout << myFunctorClass(5)(6);
+	return 0;
+}
+
+// same as 
+int main()
+{
+	myFunctorClass object( 5 );
+	std::cout << object(6);
+	return 0;
+}
+~~~
+
+### Copy Constructor and assign operator 
+
+~~~c++
+#include<iostream>  
+#include<stdio.h>  
+  
+using namespace std;  
+  
+class Test  
+{  
+    public:  
+    Test() {}  
+    Test(const Test &t)  
+    {  
+        cout<<"Copy constructor called "<<endl;  
+    }  
+      
+    Test& operator = (const Test &t) 
+    { 
+        cout<<"Assignment operator called "<<endl; 
+        return *this; 
+    }  
+};  
+  
+// Driver code 
+int main()  
+{  
+    Test t1, t2;  
+    t2 = t1;   // assignment 
+    Test t3 = t1;  // copy 
+    getchar();  
+    return 0;  
+}  
+~~~
+
+*Assignment operator called
+Copy constructor called*
+
+
+
+They all have a default one by compiler. 
+
+- All STL contains always stores the copy of **inserted** **objects** not the actual one. So, whenever we insert any element or object in container then its **copy constructor** **is called** to create a copy and then this copy is inserted in the container.
+- While insertion in std::vector it might be possible that storage **relocation** takes place internally due to insufficient space. In such cases **assignment operator** will be called on objects inside the container to copy them from one location to another.
+
+### Copy Constructor 
+
+**When is copy constructor called?**
+In C++, a Copy Constructor may be called in following cases:
+\1. When an object of the class is returned by value.
+\2. When an object of the class is passed (to a function) by value as an argument.
+\3. When an object is constructed based on another object of the same class.
+\4. When the compiler generates a temporary object.
+
+**When is user-defined copy constructor needed?**
+If we don’t define our own copy constructor, the **C++ compiler creates a default copy constructor** for each class which does a **member-wise copy between objects**. The compiler created copy constructor works fine in general. We need to define our own copy constructor only i**f an object has pointers or any runtime allocation** of the resource like file handle, a network connection, etc. **Deep copy.**  
+
+### Deque
+
+**How std::deque works internally**
+
+Now a question rises how high deque is able to give good performance for insertion and deletion at both ends?
+To know the answer we need to know little internal implementation of dequeue.
+
+A deque is generally implemented as a collection of memory blocks. These memory blocks contains the elements at contiguous locations.
+
+[![deque](https://thispointer.com//wp-content/uploads/2015/07/deque.png)](https://thispointer.com//wp-content/uploads/2015/07/deque.png)
+
+When we create a deque object it internally allocates a memory block to store the elements at contigious location.
+
+- When we insert an element in end it stores that in allocated memory block untill it gets filled and when this memory block gets filled with elements then it allocates a new memory block and links it with the end of previous memory block. Now further inserted elements in the back are stored in this new memory block.
+- When we insert an element in front it allocates a new memory block and links it with the front of previous memory block. Now further inserted elements in the front are stored in this new memory block unless it gets filled.
+- Consider deque as a linked list of vectors i.e. each node of this linked list is a memory block that store elements at contiguous memory location and each of the memory block node is linked with its previous and next memory block node.
+
+Therefore, insertion at front is fast as compared to vector because it doesn’t need the elements to shift by 1 in current memory block to make space at front. It just checks if any space is left at left of first element in current memory block, if not then allocates a new memory block.
+
+### Smart Pointer 
+
+~~~c++
+#include <memory>
+ 
+struct Task
+{
+	int mId;
+	Task(int id ) :mId(id)
+	{std::cout<<"Task::Constructor"<<std::endl;}
+	~Task()
+	{std::cout<<"Task::Destructor"<<std::endl;}
+};
+ 
+int main()
+{
+	// Create a unique_ptr object through raw pointer
+	std::unique_ptr<Task> taskPtr(new Task(23));
+ 
+	//Access the element through unique_ptr
+	int id = taskPtr->mId;
+ 	// move ownership
+  std::unique_ptr<Task> taskPtr4 = std::move(taskPtr);
+
+  // Reseting the unique_ptr will delete the associated
+  // raw pointer and make unique_ptr object empty
+  taskPtr.reset();
+  
+  // Release the ownership of object from raw pointer
+  // it will return a raw pointer
+	Task * ptr = taskPtr5.release();
+  delete ptr;
+	return 0;
+}
+~~~
+
+Shared Pointer 
+
+~~~c++
+// create shared pointer  
+shared_ptr<int> ptr1(new int(1));
+// count # of owners 
+ptr1.use_count();
+
+shared_ptr<int> ptr2 = make_shared<int> (2);
+// reset will decrease the count by 1
+ptr2.reset();
+~~~
+
+### Lambda function and for_each
+
+In the following method, we have to write a separate function to do this
+
+~~~c++
+#include <iostream>
+#include "vector"
+using namespace std;
+void display(int a)
+{
+	cout<<a<<" ";
+}
+using namespace std;
+int main(int argc, char *argv[]) {
+	vector<int> vect{1, 2, 3, 4, 5};
+	for_each(vect.begin(), vect.end(), &display);
+  // or for_each(vect.begin(), vect.end(), display);
+}
+
+output: 1 2 3 4 5;
+~~~
+
+Instead, we can use lambda function to embedded the function directly.
+
+~~~c++
+[](int x) {
+        std::cout<<x<<" ";
+    }
+~~~
+
+- [] is used to pass the outer scope elements
+- (int x) shows argument x is passed
+
+~~~c++
+#include <iostream>
+ 
+int main(int argc, char *argv[]) {
+	vector<int> vect{1, 2, 3, 4, 5};
+	for_each(vect.begin(), vect.end(), [](int x){x++; cout<<x<<" ";});
+}
+~~~
+
+~~~c++
+[=](int &x) {
+  // All outer scope elements has been passed by value
+}
+~~~
+
+~~~c++
+[&](int &x) {
+  // All outer scope elements has been passed by reference
+}
+~~~
+
+~~~c++
+#include <iostream>
+int main() {
+    int arr[] = { 1, 2, 3, 4, 5 };
+ 
+    int mul = 5;
+ 
+    std::for_each(arr, arr + sizeof(arr) / sizeof(int), [&](int x) {
+        std::cout<<x<<" ";
+        // Can modify the mul inside this lambda function because
+        // all outer scope elements has write access here.
+            mul = 3;
+        });
+    std::cout << std::endl;
+ 
+    std::for_each(arr, arr + sizeof(arr) / sizeof(int), [=](int &x) {
+        x= x*mul;
+        // Can not modify the mul inside this lambda function because
+        // all outer scope elements has read only access here
+        });
+    std::cout << std::endl;
+ 
+    std::for_each(arr, arr + sizeof(arr) / sizeof(int), [](int x) {
+        // No access to mul inside this lambda function because
+        // all outer scope elements are not visible here.
+        //std::cout<<mul<<" ";
+        });
+    std::cout << std::endl;
+ 
+}
+~~~
+
+
+
+### Thread 
+
+1. Create thread 
+
+~~~c++
+void thread_function()
+{
+	for (int i=0; i<10; i++) cout<<i<<" ";
+	cout<<"t1: "<<this_thread::get_id()<<endl;
+}
+
+class functor
+{
+public:
+	void operator() ()
+	{
+		for (int i=10; i<20; i++) cout<<i<<" ";
+		cout<<endl;
+	}			
+};
+
+int main()
+{
+	// function pointer 
+	thread t1{&thread_function};
+	t1.join();
+	
+	// functor
+	thread t2{functor()};
+  cout<<"t2: "<<t2.get_id()<<endl;
+	t2.join();
+	
+	// lambda function 
+	thread t3{[](){
+		for (int i=100; i<110; i++) cout<<i<<" ";
+			cout<<endl;
+		}};
+	cout<<"t3: "<<t3.get_id()<<endl;
+	t3.join();
+	return 0;
+}
+~~~
+
+#### Join and detach 
+
+**Use join in most cases.** 
+
+`detach()` is mainly useful when you have a **task that has to be done in background**, but you don't **care about its execution**. This is usually a case for some libraries. They may silently create a background worker thread and detach it so you won't even notice it.
+
+You cannot join or detach a thread that is already joined or detached. It will cause the program to terminate. So check if it's joinable first.
+
+~~~c++
+std::thread threadObj( (WorkerThread()) );
+if(threadObj.joinable())
+{
+  std::cout<<"Detaching Thread "<<std::endl;
+  threadObj.detach();
+}
+if(threadObj.joinable())    
+{
+  std::cout<<"Detaching Thread "<<std::endl;
+  threadObj.detach();
+}
+
+std::thread threadObj2( (WorkerThread()) );
+if(threadObj2.joinable())
+{
+  std::cout<<"Joining Thread "<<std::endl;
+  threadObj2.join();
+}
+if(threadObj2.joinable())    
+{
+  std::cout<<"Joining Thread "<<std::endl;
+  threadObj2.join();
+}
+~~~
+
+### Pass argument to thread
+
+The argument is **passed by value by default.** 
+
+~~~c++
+void threadCallback(int x, std::string str)
+{
+    std::cout<<"Passed Number = "<<x<<std::endl;
+    std::cout<<"Passed String = "<<str<<std::endl;
+}
+int main()  
+{
+    int x = 10;
+    std::string str = "Sample String";
+    std::thread threadObj(threadCallback, x, str);
+    threadObj.join();
+    return 0;
+}
+~~~
+
+~~~c++
+void thread_function(int x)
+{cout<<x<<endl;}
+
+class functor
+{
+public:
+	void operator() (int x)
+	{cout<<x<<endl;}			
+};
+
+int main()
+{
+	// function pointer 
+	thread t1{&thread_function, 1};
+	t1.join();
+	
+	// functor
+	thread t2{functor(), 10};
+	t2.join();
+	
+	// lambda function 
+	thread t3([](int y) {cout<<y<<endl;}, 
+											20);
+	t3.join();
+	return 0;
+}
+~~~
+
+**To pass by reference:** 
+
+~~~c++ 
+void threadCallback(int const & x)
+{
+    int & y = const_cast<int &>(x);
+    y++;
+    std::cout<<"Inside Thread x = "<<x<<std::endl;
+}
+
+int main()
+{
+    int x = 9;
+    std::thread t1(threadCallback, std::ref(x));
+    t1.join();
+    return 0;
+}
+~~~
+
+
+
+**Don’t pass addresses of variables from local stack** to thread’s callback function. Because it might be possible that local variable in Thread 1 goes out of scope but Thread 2 is still trying to access it through it’s address.
+
+~~~c++
+void newThreadCallback(int * p)
+{
+    std::cout<<"Inside Thread :  "" : p = "<<p<<std::endl;
+    std::chrono::milliseconds dura( 1000 );
+    std::this_thread::sleep_for( dura );
+    *p = 19;
+}
+void startNewThread()
+{
+    int i = 10;
+    std::cout<<"Inside Main Thread :  "" : i = "<<i<<std::endl;
+    std::thread t(newThreadCallback,&i);
+    t.join();
+  	// or t.detach();
+    std::cout<<"Inside Main Thread :  "" : i = "<<i<<std::endl;
+}
+int main()
+{
+    startNewThread();
+    std::chrono::milliseconds dura( 2000 );
+    std::this_thread::sleep_for( dura );
+    return 0;
+}
+
+// output 
+// if join()
+Inside Main Thread :   : i = 10
+Inside Thread :   : p = 0x7ffee71267bc
+Inside Main Thread :   : i = 19
+  
+// if detach
+Inside Main Thread :   : i = 10
+Inside Main Thread :   : i = 10
+Inside Thread :   : p = 0x7ffee75627bc
+
+~~~
+
+### **Assigning pointer to member function of a class as thread function:**
+
+Pass the **pointer to member function as callback function** and **pass pointer to Object** as **second argument.**
+
+~~~c++
+class foo {
+public:
+  foo(){}
+  foo(const foo& obj){}
+  void thread_fun(int x) {}
+}
+
+int main(){
+  foo obj;
+  std::thread t1{&foo::thread_fun, &obj, 10};
+  t1.join();
+  return 0;
+}
+~~~
+
+### Mutex
+
+~~~c++
+class wallet
+{
+	int money;
+	mutex m;
+	wallet() : money(0){}
+	void addMoney(int x){
+		m.lock();
+		money++;
+		m.unlock();
+	}
+	// or use lock_guard
+	void addMoney2(int x){
+		// automatically locked in the constructor
+		std::lock_guard<std::mutex> guard(m);
+		money++; 
+		// goes out of scope, destuctor automatically unlock
+	}
+~~~
+
+### Event handling 
+
+Suppose we are building a network based application. This application does following tasks
+
+1. Perform some handshaking with server
+2. Load data from XML files
+3. Do processing on the data loaded from XML
+
+Task 1 and task 2 -> parallel.
+
+Task 3 depends on task 2.
+
+
+
+Thread 1: 
+
+1. Handshake
+2. Wait for thread 2 to finish 
+3. Do some work on data
+
+Thread 2:
+
+1. Load data from XML
+2. Notify thread 1. 
+
+**Option1: global variable with mutex** 
+
+Cons: cost a lot CPU resources for the while loop (lock and unlock)
+
+~~~c++
+class App
+{
+	std::mutex m;
+	bool done;
+
+public:
+	App(): done(false){}
+	void loadData(){
+		// function for thread 2
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::cout<<" loading xml"<<std::endl;
+		std::lock_guard<std::mutex> guard(m);
+		done = true;
+	}	
+	void mainTask(){
+		std::cout<<" handshaking "<<std::endl;
+		std::cout<<" handshaking finished "<<std::endl;
+		m.lock();
+		while (!done) {
+			m.unlock();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+			m.lock();
+		}
+		m.unlock();
+		std::cout<<" data loaded, start processing"<<std::endl;
+	}
+};
+
+int main(){
+	App app;
+	std::thread t1{&App::mainTask, &app};
+	std::thread t2{&App::loadData, &app};
+	
+	t2.join();
+	t1.join();
+	return 0;
+}
+
+/*** 
+ handshaking 
+ handshaking finished 
+ loading xml
+ data loaded, start processing
+/
+~~~
+
+`lock_guard` and `unique_lock` are **pretty much the same thing**; `lock_guard`is a restricted version with a limited interface.
+
+A `lock_guard` always holds a lock from its construction to its destruction. A `unique_lock` can be created without immediately locking, can unlock at any point in its existence, and can transfer ownership of the lock from one instance to another.
+
+So you always use `lock_guard`, unless you need the capabilities of `unique_lock`. **A `condition_variable` needs a `unique_lock`** because it needs to **lock and unlock it while wait**.  
+
+~~~c++
+#include "condition_variable"
+
+class App
+{
+	std::mutex m;
+	std::condition_variable cv;
+	bool done;
+	
+public:
+	App(): done(false){}
+	void loadData(){
+		// function for thread 2
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::cout<<" start loading xml"<<std::endl;
+		std::lock_guard<std::mutex> guard(m);
+		// or 
+		// std::unique_lock<std::mutex> guard(m);
+		// here doesn't matter 
+		done = true;
+		cv.notify_all();
+		// cv.notify_one();
+	}	
+	void mainTask(){
+		std::cout<<" handshaking "<<std::endl;
+		std::cout<<" handshaking finished "<<std::endl;
+		
+		std::unique_lock<std::mutex> u_lock(m);
+		// condition variable requires unique_lock
+		// option 1: cv.wait(u_lock, std::bind(&App::isDone, this));
+		// option 2:
+		while (!done) cv.wait(u_lock);
+		std::cout<<" data loaded, start processing"<<std::endl;
+	}
+//	bool isDone() {return done;}
+};
+
+int main(){
+	App app;
+	std::thread t1{&App::mainTask, &app};
+	std::thread t2{&App::loadData, &app};
+	
+	t2.join();
+	t1.join();
+	return 0;
+}
+~~~
+
+### Future and promise 
+
+Can we do this even more easier? 
+
+~~~c++
+#include "future"
+class App
+{
+	std::promise<void> p1;
+public:
+	void loadData(){
+		// function for thread 2
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::cout<<" start loading xml"<<std::endl;
+		p1.set_value();
+	}	
+	void mainTask(){
+		std::cout<<" handshaking "<<std::endl;
+		std::cout<<" handshaking finished "<<std::endl;
+		
+		p1.get_future().wait();
+		std::cout<<" data loaded, start processing"<<std::endl;
+	}
+};
+
+int main(){
+	App app;
+	std::thread t1{&App::mainTask, &app};
+	std::thread t2{&App::loadData, &app};
+	
+	t2.join();
+	t1.join();
+	return 0;
+}
+~~~
+
