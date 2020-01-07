@@ -1934,3 +1934,936 @@ int main(){
 }
 ~~~
 
+Many times we encounter a situation where **we want a thread to return a result**.
+
+**1.) Old Way : Share data among threads using pointer**
+
+Pass a pointer to the new thread and this thread will set the data in it. Till then in main thread keep on waiting using a **condition variable**. When new thread sets the data and signals the condition variable, then main thread will wake up and fetch the data from that pointer.
+
+To do a simple thing we used a condition variable, a mutex and a pointer i.e. 3 items to catch a returned value.
+Now suppose we want this thread to return 3 different values at different point of time then problem will become more complex. Could there be a simple solution for returning the value from threads.
+
+**2.) C++11 Way : Using std::future and std::promise**
+
+Actually a **std::future** object **internally stores a value** that will be assigned in future and it also provides a mechanism to access that value i.e. using **get() member function**. But if somebody tries to **access this associated value of future** through get() function **before it is available**, then **get() function will block** until it's available. 
+
+A **std::promise** object shares data with its associated **std::future** object.
+
+As of now this **promise object doesn’t have any associated value**. But it **gives a promise that somebody will surely set the value in it** and once its set then you can get that value through associated **std::future object**.
+
+![std::promise and std::future](https://thispointer.com//wp-content/uploads/2015/06/promise.png)
+
+~~~c++
+class App
+{
+	std::promise<int> p1;
+public:
+	void loadData(){
+		// function for thread 2
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		std::cout<<"start loading xml"<<std::endl;
+		p1.set_value(35);
+	}	
+	void mainTask(){
+		std::cout<<"handshaking "<<std::endl;
+		std::cout<<"handshaking finished "<<std::endl;
+		
+		std::future<int> ftr = p1.get_future();
+		// get() is the command that will block the thread until value is set
+		std::cout<<ftr.get()<<std::endl;
+		std::cout<<"data loaded, start processing"<<std::endl;
+	}
+};
+
+int main(){
+	App app;
+	std::thread t1{&App::mainTask, &app};
+	std::thread t2{&App::loadData, &app};
+	
+	t2.join();
+	t1.join();
+	return 0;
+}
+/***
+handshaking 
+handshaking finished 
+start loading xml
+35
+data loaded, start processing
+/
+~~~
+
+If it's not a class, pass the promise as a pointer of reference
+
+~~~c++
+void foo(std::promise<int>& p){
+	std::cout<<"inside thread"<<std::endl;
+	p.set_value(35);
+}
+
+int main(){
+	
+	std::cout<<"main thread"<<std::endl;
+	std::promise<int> p;
+	std::future<int> ftr = p.get_future();
+	std::thread t1{foo, std::ref(p)};
+	int res = ftr.get();
+	std::cout<<"the result from thread is "<<res<<std::endl;
+	t1.join();
+	return 0;
+}
+~~~
+
+~~~c++
+void initiazer(std::promise<int> * promObj)
+{
+	std::cout<<"Inside Thread"<<std::endl;     promObj->set_value(35);
+}
+ 
+int main()
+{
+	std::promise<int> promiseObj;
+	std::future<int> futureObj = promiseObj.get_future();
+	std::thread th(initiazer, &promiseObj);
+	std::cout<<futureObj.get()<<std::endl;
+	th.join();
+	return 0;
+}
+~~~
+
+### std::async()
+
+**Need of std::async()**
+
+Suppose we have to fetch some data (string) from DB and some from files in file-system. Then I need to merge both the strings and print.
+
+In a single thread we will do like this,
+
+~~~c++
+#include <chrono>
+#include <thread>
+ 
+using namespace std::chrono;
+ 
+std::string fetchDataFromDB(std::string recvdData)
+{
+	// Make sure that function takes 5 seconds to complete
+	std::this_thread::sleep_for(seconds(5));
+ 
+	//Do stuff like creating DB Connection and fetching Data
+	return "DB_" + recvdData;
+}
+ 
+std::string fetchDataFromFile(std::string recvdData)
+{
+	// Make sure that function takes 5 seconds to complete
+	std::this_thread::sleep_for(seconds(5));
+ 
+	//Do stuff like fetching Data File
+	return "File_" + recvdData;
+}
+
+int main()
+{
+	//Fetch Data from DB
+	std::string dbData = fetchDataFromDB("Data");
+	//Fetch Data from File
+	std::string fileData = fetchDataFromFile("Data");
+	return 0;
+}
+/***
+Takes 10 seconds to do both
+/
+~~~
+
+**std::async() does following things,**
+
+- It **automatically creates a thread** (Or picks from internal thread pool) and **a** **promise object** for us.
+- Then **passes the std::promise object to thread function** and **returns the associated std::future object.**
+- When our **passed argument function exits** then its value will be set in this promise object, so eventually r**eturn value will be** available in **std::future object.**
+
+~~~c++
+#include <string>
+#include <chrono>
+#include <thread>
+#include <future>
+ 
+using namespace std::chrono;
+ 
+std::string fetchDataFromDB(std::string recvdData)
+{
+	// Make sure that function takes 5 seconds to complete
+	std::this_thread::sleep_for(seconds(5));
+ 
+	//Do stuff like creating DB Connection and fetching Data
+	return "DB_" + recvdData;
+}
+ 
+std::string fetchDataFromFile(std::string recvdData)
+{
+	// Make sure that function takes 5 seconds to complete
+	std::this_thread::sleep_for(seconds(5));
+ 
+	//Do stuff like fetching Data File
+	return "File_" + recvdData;
+}
+ 
+int main()
+{ 
+	std::future<std::string> resultFromDB = std::async(std::launch::async, fetchDataFromDB, "Data");
+ 
+	//Fetch Data from File
+	std::string fileData = fetchDataFromFile("Data");
+ 
+	//Fetch Data from DB
+	// Will block till data is available in future<std::string> object.
+	std::string dbData = resultFromDB.get();
+	return 0;
+}
+~~~
+
+~~~c++
+int initiazer(int x)
+{
+	std::cout<<"Inside Thread, X is "<<x<<std::endl;
+	return x*x;
+}
+int main()
+{
+	std::future<int> ftr = std::async(std::launch::async, initiazer, 10);
+	int res  = ftr.get();
+	std::cout<<res<<std::endl;
+	return 0;
+}
+~~~
+
+### package_task<>
+
+#### Creating std::packaged_task<> object
+
+std::package_task<> is a class template, therefore we need to pass template parameter to packaged_task<> i.e. type of callable function
+
+~~~c++
+// Create a packaged_task<> that encapsulated the callback i.e. a function
+std::packaged_task<std::string (std::string)> task(getDataFromDB);
+~~~
+
+#### Fetch the future object from it,
+
+~~~c++
+// Fetch the associated future<> from packaged_task<>
+std::future<std::string> result = task.get_future();
+~~~
+
+## Factory
+
+**1. Object creation logic becomes too convoluted**
+
+**2. Constructor is not descriptive** 
+
+- Name mandated by name of containing type
+- Cannot overload with same sets of arguments with different names 
+- Can turn into "optional parameter hell"
+
+**3. Object creation (non-piecewise, unlike builder) can be outsourced to** 
+
+- A separate function (Factory Method)
+- That may exist in a separate class (Factory)
+- Can create hierarchy of factories with Abstract Factory
+
+Where we need factory: 
+
+1. We want different constructors of a class, cannot overload because they take the same list of arguments.
+2. We want the name of constructors be different of class name. Impossible in C++, but available in Swift
+
+### Factory
+
+~~~c++
+// this could work, but the name a and b are not readable, the name of constructor is also vague
+enum class PointType
+{
+  cartesian,
+  polar
+};
+
+class Point
+{
+  Point(float a, float b, PointType type = PointType::cartesian)
+  {
+    if (type == PointType::cartesian)
+    {
+      x = a; b = y;
+    } 
+    else
+    {
+      x = a*cos(b);
+      y = a*sin(b);
+    }
+  }
+};
+~~~
+
+Better idea, using a Factory
+
+~~~c++
+#include <cmath>
+
+class Point
+{
+  // constructor is private
+  Point(float x, float y) : x(x), y(y){}
+public:
+  float x, y;
+
+  friend class PointFactory; // breaks open OCP, or make everything public
+};
+
+class PointFactory
+{
+  static Point NewCartesian(float x, float y)
+  {
+    return Point{ x,y };
+  }
+
+  static Point NewPolar(float r, float theta)
+  {
+    return Point{ r*cos(theta), r*sin(theta) };
+  }
+};
+~~~
+
+### Factory method 
+
+Make constructor private, add static member functions that returns instances. 
+
+~~~c++
+#include <cmath> 
+class Point
+{
+  int x, y;
+  Point(int x, int y) : x(x), y(y) {}
+public:
+  static newCartesian(int x, int y){
+    return Point{x, y};
+    // or return {x, y};
+  }
+  static newPolar(int r, int theta){
+    return {r*cos(theta), r*sin(theat)};
+  }
+};
+
+int main()
+{
+  auto p = Point::newCartesian(1, 2);
+  std::cout<<p.x<<p.y<<endl;
+}
+~~~
+
+### Abstract Factory
+
+You have a **family of product**, based on **an abstraction**, and you can have a **family of factory correspondingly**, and they can also **based on factory abstractions**.
+
+~~~c++
+struct HotDrink
+{
+  virtual ~HotDrink() = default;
+  virtual void prepare(int volume) = 0;
+};
+
+struct Tea : HotDrink
+{
+  void prepare(int volume) override
+  {cout << "Take tea bag, boil water, pour " << volume << "ml, add some lemon" << endl;}
+};
+
+struct Coffee : HotDrink
+{
+  void prepare(int volume) override
+  {cout << "Grind some beans, boil water, pour " << volume << "ml, add cream, enjoy!" << endl;}
+};
+~~~
+
+Family of factory
+
+~~~c++
+struct HotDrinkFactory
+{
+  virtual unique_ptr<HotDrink> make() const = 0;
+};
+
+struct CoffeeFactory : HotDrinkFactory
+{
+  unique_ptr<HotDrink> make() const override
+  {
+    return make_unique<Coffee>();
+  }
+};
+
+struct TeaFactory : HotDrinkFactory
+{
+  unique_ptr<HotDrink> make() const override {
+    return make_unique<Tea>();
+  }
+};
+~~~
+Create a map of drink factory that has all different factories. Then you can simply get a factory from the map.  
+~~~c++
+class DrinkFactory
+{
+  map<string, unique_ptr<HotDrinkFactory>> hot_factories;
+public:
+  DrinkFactory()
+  {
+    hot_factories["coffee"] = make_unique<CoffeeFactory>();
+    hot_factories["tea"] = make_unique<TeaFactory>();
+  }
+
+  unique_ptr<HotDrink> make_drink(const string& name)
+  {
+    auto drink = hot_factories[name]->make();
+    drink->prepare(200); // oops!
+    return drink;
+  }
+};
+
+class DrinkWithVolumeFactory
+{
+  map<string, function<unique_ptr<HotDrink>()>> factories;
+public:
+
+  DrinkWithVolumeFactory()
+  {
+    factories["tea"] = [] {
+      auto tea = make_unique<Tea>();
+      tea->prepare(200);
+      return tea;
+    };
+  }
+
+  unique_ptr<HotDrink> make_drink(const string& name);
+};
+
+inline unique_ptr<HotDrink> DrinkWithVolumeFactory::make_drink(const string& name)
+{
+  return factories[name]();
+}
+
+~~~
+
+### Inner Factory
+
+In the first class, make the factory class friend breaks the OCP. So what? 
+
+**Use inner Factory, which basically put the factory class inside the product class.** 
+
+~~~c++
+class Point
+{
+  Point(float x, float y) : x(x), y(y) {}
+	// inner class, so you dont need to create a friend that breaks 
+  // OCP
+  class PointFactory
+  {
+    PointFactory() {}
+  public:
+    static Point NewCartesian(float x, float y)
+    {
+      return { x,y };
+    }
+    static Point NewPolar(float r, float theta)
+    {
+      return{ r*cos(theta), r*sin(theta) };
+    }
+  };
+public:
+  float x, y;
+  static PointFactory Factory;
+};
+
+int main(){
+  auto pp = Point::Factory.NewCartesian(2, 3);
+  return 0;
+}
+~~~
+
+## Prototype
+
+When it's easier to copy an existing object than fully initialize a new one. 
+
+1. **Complicated objects (cars, iPhone) aren't designed from scratch**
+2. **An existing (partially or fully constructed) design is a Prototype**
+3. **We make a copy of the prototype and customized it**
+   - Require deep copy support
+4. **Make the cloning convenient** 
+
+
+
+**Summary**
+
+1. **To implement a prototype, partially construct an object and store it somewhere**
+2. **Clone the prototype** ****
+   1. Implement your own deep copy function, or
+   2. Serialize and deserialize 
+3. Customize the resulting instance 
+
+## Dependency Injection 
+
+The "injection" refers to the passing of a dependency (a service) into the object (a [client](https://en.wikipedia.org/wiki/Client_(computing))) that would use it. 
+
+Dependency Injection solves problems such as:[[3\]](https://en.wikipedia.org/wiki/Dependency_injection#cite_note-3)
+
+- How can an **application or class** be **independent** of how **its** objects are created**?
+- How can **the way objects are created** be **specified in separate configuration files**?
+- How can an application **support different configurations**?
+
+Creating objects directly within the class that requires the objects is inflexible because it commits the class to particular objects and makes it impossible to change the instantiation later independently from (without having to change) the class. It stops the class from being reusable if other objects are required, and it makes the class hard to test because real objects can't be replaced with mock objects.
+
+A class is no longer responsible for creating the objects it requires, and it doesn't have to delegate instantiation to a factory object as in the [Abstract Factory](https://en.wikipedia.org/wiki/Abstract_factory_pattern) [[4\]](https://en.wikipedia.org/wiki/Dependency_injection#cite_note-GoF-4) design pattern.
+
+Let's say if you want to write **Research code on a database**. Then you shouldn't **create an instance of that database in the research class**, instead, you should **inject an instance of the database** (take the abstraction as argument and pass any subclass object). Your **research (service code) should not depend on how the object is created.** When you leave the **argument as the abstraction class**, that way your code also **satisfy that the service code is only depend on abstractions.** 
+
+## Singleton
+
+1. **For some components it only makes sense to have one in the system**
+   - Database repository
+   - Object factory
+2. **The constructor call is expensive** 
+   - We only do it once 
+   - WE provide everyone with the same instance 
+3. **Want to prevent anyone creating additional copies** 
+4. **Need to take care of lazy instantiation and thread safety**
+
+~~~c++
+class Database
+{
+public:
+  virtual int get_population(const std::string& name) = 0;
+};
+
+class SingletonDatabase : public Database
+{
+  SingletonDatabase(){}
+  std::map<std::string, int> capitals;
+public:
+  //static int instance_count;
+
+  SingletonDatabase(SingletonDatabase const&) = delete;
+  void operator=(SingletonDatabase const&) = delete;
+
+  static SingletonDatabase& get()
+  {
+    static SingletonDatabase db;
+    return db;
+  }
+
+  int get_population(const std::string& name) override
+  {
+    return capitals[name];
+  }
+};
+
+class DummyDatabase : public Database
+{
+  std::map<std::string, int> capitals;
+public:
+  DummyDatabase(){}
+  int get_population(const std::string& name) override {
+    return capitals[name];
+  }
+};
+
+// service / research code
+struct ConfigurableRecordFinder
+{
+  explicit ConfigurableRecordFinder(Database& db)
+    : db{db}{}
+
+  int total_population(std::vector<std::string> names) const
+  {
+    int result = 0;
+    for (auto& name : names)
+      result += db.get_population(name);
+    return result;
+  }
+
+  Database& db;
+};
+~~~
+
+### Multiton
+
+Multiton pattern allows for the controlled creation of multiple instances, which it manages through the use of a [map](https://en.wikipedia.org/wiki/Associative_array).
+
+Just use this template: 
+
+~~~c++
+#include <map>
+#include <memory>
+#include <iostream>
+using namespace std;
+
+// using enum class for counting the instances 
+enum class Importance
+{
+  primary,
+  secondary,
+  tertiary
+};
+
+template <typename T, typename Key = std::string>
+class Multiton
+{
+public:
+  static shared_ptr<T> get(const Key& key)
+  {
+    if (const auto it = instances.find(key);
+        it != instances.end())
+    {
+      return it->second;
+    }
+
+    auto instance = make_shared<T>();
+    instances[key] = instance;
+    return instance;
+  }
+protected:
+  Multiton() = default;
+  virtual ~Multiton() = default;
+private:
+  static map<Key, shared_ptr<T>> instances;
+};
+
+template <typename T, typename Key>
+map<Key, shared_ptr<T>> Multiton<T, Key>::instances;
+
+class Printer
+{
+public:
+  Printer()
+  {
+    ++Printer::totalInstanceCount;
+    cout << "A total of " <<
+      Printer::totalInstanceCount <<
+      " instances created so far\n";
+  }
+private:
+  static int totalInstanceCount;
+};
+
+int Printer::totalInstanceCount = 0;
+
+int main()
+{
+  typedef Multiton<Printer, Importance> mt;
+
+  auto main = mt::get(Importance::primary);
+  auto aux = mt::get(Importance::secondary);
+  auto aux2 = mt::get(Importance::secondary);
+}
+~~~
+
+### Small tips
+
+~~~c++
+struct foo
+{
+	int x;
+	int y;
+	int z;
+	
+	friend ostream &operator<<(ostream &os, const foo& f){
+		os << f.x << " " << f.y << " " << f.z <<endl;
+		return os;
+	}
+};
+
+int main(){
+	foo a{1, 2};
+	cout<<a<<endl;
+}
+/***
+1 2 0
+/
+~~~
+
+
+
+## Adapter 
+
+Getting the interface you want from the interface you have. 
+
+If you **have a function for drawing points**, now you **want to draw line**. What you need is a **line to point adapter**, **take a line and convert to a bunch of points**, and then **draw the line using the draw_points** functions **instead of writing a draw_lines function**.  
+
+
+
+
+
+## Bridges
+
+**Connecting components together through abstractions.**
+
+1. Bridge prevents complexity explosion 
+2. Example
+   1. Base class threadScheduler
+   2. Can be preemptive or cooperative 
+   3. Can run on Windows or Unix
+   4. End up with 2x2 scenario: combination 
+3. Bridge pattern avoids the entity explosion. 
+
+
+
+### PImpl Idiom (Pointer to IMPLementation)
+
+When changes are made to a [header file](https://www.geeksforgeeks.org/difference-header-file-library/), all sources including it needs to be recompiled. In large projects and libraries, it can cause build time issues due to the fact that even when a small change to the implementation is made everyone has to wait sometime until they compile their code. One way to solve this problem is by using the **PImpl Idiom**, which **hides the implementation in the headers and includes an interface file which compiles instantly**.
+
+ Using Opaque pointer: 
+
+Let’s say we are working on an app to deal with images. We want to develop apps for windows, android and apple platforms. We can **have shared code which would be used by all platforms** and then **different end-point can have platform specific code**.
+To deal with images, we have a **CImage class exposing APIs** to deal with various **image operations (scale, rotate, move, save etc**).
+Since **all the platforms will be providing same operations**, we would **define this class in a header file**. But **the way an image is handled might differ across platforms.** 
+
+As it can be seen from the above example, **while defining blueprint of the CImage class we are only mentioning that there is a SImageInfo data structure.**
+
+- **Image.h :** A header file to store class declaration. Shared header. 
+
+  ~~~c++
+  class CImage
+  {
+  public: 
+    CImage();
+    ~CImage();
+    // opaque pointer
+    // this class depends on the implementation 
+    class SImageInfo;
+    SImageInfo* pImageInfo;
+    // we cant see the contents of the class here
+    void Rotate(double angle);
+    void Scale(double factorX, factorY);
+    void Move(int toX, int toY);
+  };
+  ~~~
+
+- **Image.cpp :** Code that will be shared across different end-points
+
+  ~~~c++
+  CImage::CImage() : pImageInfo(new SImageINfo) {}
+  CImage::~CImage() {delete pImageInfo;}
+  ~~~
+  
+- **Image_windows.cpp :** Code specific to Windows will reside here
+	~~~c++
+	class CImage::SImageInfo 
+{ 
+   // Windows specific DataSet 
+  string get_format() {}
+  }; 
+  
+  void CImage::Rotate() 
+  { 
+      // Make use of windows specific SImageInfo 
+    string format = pImageInfo->get_format();
+    cout<<format<<endl;
+  } 
+  
+  ~~~
+
+- **Image_apple.cpp :** Code specific to Apple will reside here
+
+  ~~~c++
+  class CImage::SImageInfo 
+  { 
+      // Apple specific DataSet 
+  }; 
+  
+  void CImage::Rotate() 
+  { 
+      // Make use of apple specific SImageInfo 
+  }
+  ~~~
+
+#### Another example 
+
+The customers don't need to compile the header files. We can change the implementation whatever we want and give them binary file. The customers can keep use their own header file.  
+
+~~~c++
+#pragma once
+#include <string>
+
+struct Person
+{
+  std::string name;
+
+  class PersonImpl;
+  PersonImpl *impl; // bridge - not necessarily inner class, can vary
+
+  Person();
+  ~Person();
+
+  void greet();
+};
+~~~
+
+
+
+~~~c++
+#include "Person.h"
+
+struct Person::PersonImpl
+{
+  void greet(Person* p);
+};
+
+void Person::PersonImpl::greet(Person* p)
+{
+  printf("hello %s", p->name.c_str());
+}
+
+Person::Person()
+  : impl(new PersonImpl)
+{
+}
+
+Person::~Person()
+{
+  delete impl;
+}
+
+void Person::greet()
+{
+  impl->greet(this);
+}
+~~~
+
+
+
+## Composite 
+
+A mechanism for treating individual (scale) objects (all kinds of subclasses) and compositions of objects (objects contains other objects) in a uniform manner. 
+
+The object and collection of objects (composition) all subclass from abstraction and they all behave the same way. 
+
+~~~c++
+#pragma once
+#include <iostream>
+#include <vector>
+#include <memory>
+
+struct GraphicObject
+{
+  virtual void draw() = 0;
+};
+
+struct Circle : GraphicObject
+{
+  void draw() override
+  {
+    std::cout << "Circle" << std::endl;
+  }
+};
+
+struct Group : GraphicObject
+{
+  std::string name;
+	std::vector<GraphicObject*> objects;
+
+  explicit Group(const std::string& name)
+    : name{name}{}
+
+  void draw() override
+  {
+    std::cout << "Group " << name.c_str() << " contains:" << std::endl;
+    for (auto&& o : objects)
+      o->draw();
+  }
+};
+
+inline void graphics()
+{
+  Group root("root");
+  Circle c1, c2;
+  root.objects.push_back(&c1);
+
+  Group subgroup("sub");
+  subgroup.objects.push_back(&c2);
+
+  root.objects.push_back(&subgroup);
+
+  root.draw();
+}
+~~~
+
+### Virtual Base Class
+
+Class B and Class C are all subclass of A, now when you create a subclass D that inherit from both B and C, then you have two copies of A, which member of A would you actually call? This is an ambiguity. 
+
+The solution is to `class B: virtual public A{}`
+
+~~~c++
+#include <iostream> 
+using namespace std; 
+  
+class A { 
+public: 
+    int a; 
+    A() // constructor 
+    { 
+        a = 10; 
+    } 
+}; 
+  
+class B : public virtual A { 
+}; 
+  
+class C : virtual public A { 
+}; 
+  
+class D : public B, public C { 
+}; 
+  
+int main() 
+{ 
+    D object; // object creation of class d 
+    cout << "a = " << object.a << endl; 
+  
+    return 0; 
+} 
+~~~
+
+### Virtual Class
+
+ Virtual class is **a nested inner class whose functions and member variables can be overridden** or redefined by subclasses of an outer class. 
+
+~~~c++
+class Machine
+{
+public: 
+  void run() {}
+  class parts{
+    public: 
+    virtual int fun1() = 0;
+  };
+};
+
+class Car::Machine
+{
+  public:
+  void run(){}
+  class parts::Machine::parts{
+    int fun1() override {
+      return 1;
+    }
+  }
+};
+~~~
+
+
+
+
+
+## Strategy ( also known as policy )
+
+1. Many algorithms can be decomposed to higher  and lower level parts
+2. Making tea can be decomposed into 
+   1. The process of making hot beverage 
+   2. Tea-specific things (putting teabag into water)
+3. The high level algorithm can be reused for making coffee 
