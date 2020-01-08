@@ -2867,3 +2867,71 @@ class Car::Machine
    1. The process of making hot beverage 
    2. Tea-specific things (putting teabag into water)
 3. The high level algorithm can be reused for making coffee 
+
+
+
+
+
+## Define comparison functions in C++
+
+### Define operator < ()
+
+~~~c++
+struct Edge
+{
+  int from, to, weight;
+  bool operator < (const Edge &other) const{
+    return weight < other.weight;
+  }
+};
+~~~
+
+Or 
+
+~~~c++
+struct Edge
+{
+  int from, to, weight;
+  bool operator < (const Edge& a, const Edge& b){
+    return a.weight < b.weight;
+  }
+};
+~~~
+
+Now the edge will be sorted naturally 
+~~~c++
+vector<Edge> v;
+sort(v.begin(), v.end());
+
+// or 
+
+priority_queue<Edge> pq;
+set<edge> s;
+~~~
+
+### Define a custom comparison function
+
+~~~c++
+bool cmp(const Edge& a, const Edge& b){
+  return a.weight < b.weight;
+}
+
+stable_sort(v.begin(), v.end(), &cmp);
+~~~
+
+### Define Operator () ()
+
+~~~c++
+struct cmp
+{
+  operator() (const Edge& a, const Edge& b){
+    return a.weight < b.weight;
+  }
+};
+
+priority_queue<int, vector<int>, cmp> pq;
+~~~
+
+### Stable_sort()
+
+Why use stable_sort()? Equal elements are in the original order. While in sort() this is undefined.  
