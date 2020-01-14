@@ -1364,7 +1364,7 @@ int main()
 *Assignment operator called
 Copy constructor called*
 
-
+**Assign happens when an object already has content.** When assign, inside the program creates a clone of t1, then destructs the resources holds by t2 originally, then attach the clone to t1. 
 
 They all have a default one by compiler. 
 
@@ -1382,6 +1382,78 @@ In C++, a Copy Constructor may be called in following cases:
 
 **When is user-defined copy constructor needed?**
 If we don’t define our own copy constructor, the **C++ compiler creates a default copy constructor** for each class which does a **member-wise copy between objects**. The compiler created copy constructor works fine in general. We need to define our own copy constructor only i**f an object has pointers or any runtime allocation** of the resource like file handle, a network connection, etc. **Deep copy.**  
+
+
+
+### Move Semantics
+
+Suppose `X` is a class that holds a pointer or handle to some resource, say, `m_pResource`. By a resource, I mean anything that takes considerable effort to construct, clone, or destruct. A good example is `std::vector`, which holds a collection of objects that live in an array of allocated memory. Then, logically, the copy assignment operator for `X` looks like this:
+
+```c++
+X& X::operator=(X const & rhs)
+{
+  // [...]
+  // Make a clone of what rhs.m_pResource refers to.
+  // Destruct the resource that m_pResource refers to. 
+  // Attach the clone to m_pResource.
+  // [...]
+}
+```
+
+Similar reasoning applies to the copy constructor. Now suppose `X` is used as follows:
+
+```c++
+X foo();
+X x;
+// perhaps use x in various ways
+x = foo();
+```
+
+The last line above
+
+- clones the resource from the temporary returned by `foo`,
+- destructs the resource held by `x` and replaces it with the clone, 
+- destructs the temporary and thereby releases its resource.
+
+Rather obviously, it would be ok, and much more efficient, to swap resource pointers (handles) between `x` and the temporary, and then let the temporary's destructor destruct `x`'s original resource. In other words, in the special case where the right hand side of the assignment is an rvalue, we want the copy assignment operator to act like this:
+
+```c++
+// [...]
+// swap m_pResource and rhs.m_pResource
+// [...]  
+```
+
+This is called ***move semantics***. With C++11, this conditional behavior can be achieved via an overload:
+
+RHS here is called a **r_value reference** 
+
+```c++
+X& X::operator=(X && rhs)
+{
+  // [...]
+  // swap this->m_pResource and rhs.m_pResource
+  // [...]  
+}
+```
+
+**The content is actually swapped rather than copied. Thus faster.** 
+
+## Class has default stuffs
+
+1. Constructor 
+2. Destructor 
+3. Copy constructor 
+4. Assign Operator 
+5. Move constructor 
+6. Move assignment 
+
+## Do not do return std::move(some_vector)
+
+The c++ complier has **Return Value Optimization (RVO)** which will **automatically** **avoid copy** by make the return value a r_value. Check c++ **copy elision** 
+
+In case class `T` has **move constructor not deleted**, and notice `t` is a local variable that `return t` is eligible for copy elision, it move constructs the returned object just like `return std::move(t);` does. However `return t;` is still eligible to copy/move elision, so the construction may be omitted, while `return std::move(t)` always constructs the return value using move constructor.
+
+In case move constructor in class `T` is deleted but copy constructor available, `return std::move(t);` will not compile, while `return t;` still compiles using copy constructor.
 
 ### Deque
 
@@ -2924,7 +2996,7 @@ stable_sort(v.begin(), v.end(), &cmp);
 ~~~c++
 struct cmp
 {
-  operator() (const Edge& a, const Edge& b){
+  bool operator() (const Edge& a, const Edge& b){
     return a.weight < b.weight;
   }
 };
@@ -2935,3 +3007,97 @@ priority_queue<int, vector<int>, cmp> pq;
 ### Stable_sort()
 
 Why use stable_sort()? Equal elements are in the original order. While in sort() this is undefined.  
+
+## emplace vs insert in C++ STL
+
+In C++, all containers ([vector](http://www.geeksforgeeks.org/vector-in-cpp-stl/), [stack](https://www.geeksforgeeks.org/stack-in-cpp-stl/), [queue](https://www.geeksforgeeks.org/queue-cpp-stl/), [set](http://www.geeksforgeeks.org/set-in-cpp-stl/), [map](http://www.geeksforgeeks.org/map-associative-containers-the-c-standard-template-library-stl/), etc) support both insert and emplace operations.
+
+The advantage of emplace is, it does in-place insertion and avoids an unnecessary copy of object. **For primitive data types**, it **does not matter** which one we use. But for **objects, use of emplace() is preferred for efficiency reasons.**
+
+## C++ Return Value optimization 
+
+https://en.wikipedia.org/wiki/Return_value_optimization
+
+## Q: What is `std::move`?
+
+A: `std::move()` is a function from the C++ Standard Library for casting to a rvalue reference. 
+
+Simplisticly `std::move(t)` is equivalent to:
+
+```cpp
+static_cast<T&&>(t);
+```
+
+An rvalue is a temporary that does not persist beyond the expression that defines it, such as a intermediate function result which is never stored in a variable.
+
+```cpp
+int a = 3; // 3 is a rvalue, does not exist after expression is evaluated
+int b = a; // a is a lvalue, keeps existing after expression is evaluated
+```
+
+An implementation for std::move() is given in [N2027: "A Brief Introduction to Rvalue References"](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2027.html#Move_Semantics) as follows:
+
+```cpp
+template <class T>
+typename remove_reference<T>::type&&
+std::move(T&& a)
+{
+    return a;
+}
+```
+
+As you can see, `std::move` returns `T&&` no matter if called with a value (`T`), reference type (`T&`) or rvalue reference (`T&&`).
+
+## Q: What does it do?
+
+A: As a cast, it does not do anything during runtime. It is only relevant at compile time to tell the compiler that you would like to continue considering the reference as an rvalue.
+
+```cpp
+foo(3 * 5); // obviously, you are calling foo with a temporary (rvalue)
+
+int a = 3 * 5;
+foo(a);     // how to tell the compiler to treat `a` as an rvalue?
+foo(std::move(a)); // will call `foo(int&& a)` rather than `foo(int a)` or `foo(int& a)`
+```
+
+What it does **not** do:
+
+- Make a copy of the argument
+- Call the copy constructor 
+- Change the argument object
+
+## Q: When should it be used?
+
+A: You should use `std::move` if you want to call functions which support move semantics with an argument which is not an rvalue (temporary expression).
+
+This begs the following follow-up questions for me:
+
+- What are move semantics? Move semantics in contrast to copy semantics is a programming technique in which the members of a object are initialized by 'taking over' instead of copying another object's members. Such 'take over' makes only sense with pointers and resource handles, which can be cheaply transferred by copying the pointer or integer handle rather than the underlying data.
+- What kind of classes and objects support move semantics? It is up to you as a developer to implement move semantics in your own classes if these would benefit from transferring their members instead of copying them. Once you implement move semantics, you will directly benefit from work from many library programmers who have added support for handling classes with move semantics efficiently.
+- Why can't the compiler figure it out on its own? The compiler cannot just call another overload of a function unless you say so. You must help the compiler choose whether the regular or move version of function should be called.
+- In which situations would I want to tell the compiler that it should treat a variable as an rvalue? This will most likely happen in template or library functions, where you know that an intermediate result could be salvaged.
+
+
+
+## Emplcae_back
+
+**The traditional wisdom is that `push_back` will construct a temporary object, which will then get moved into `v` whereas `emplace_back` will forward the argument along and construct it directly in place with no copies or moves.**
+
+The actual difference between these two statements is that the **more powerful** `emplace_back` will call any **type of constructor out the**re (explicit), whereas the more cautious `push_back` will call only constructors that are implicit.
+
+**Copy** example for `vec.push_back( A( 10, "hello" ) );`
+
+1) A temporary A is created on the stack
+2)a) If A has a copy ctor, then the new object is copy constructed from the temporary
+2)b) Otherwise the new object is default constructed, and the copy (assignment) operator is invoked to copy the temporary's value to the new object
+3) The temporary object is destroyed
+
+**Move** example for `vec.push_back( A( 10, "hello" ) );`
+
+1) A temporary A is created on the stack
+2) The new object is default constructed
+3) The innards of the two objects are swapped ("moved")
+4) The temporary is destroyed
+
+**Emplace** example for `vec.emplace_back( 10, "hello" );`
+
